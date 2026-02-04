@@ -1,0 +1,185 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ProjectStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+enum DocumentFormat {
+  PDF
+  DOCX
+  HTML
+  TXT
+}
+
+enum ExtractionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum ReviewStatus {
+  CONFIRMED
+  REJECTED
+  MANUAL_UPDATED
+  MISSING_DATA
+  PENDING
+}
+
+enum FieldType {
+  TEXT
+  NUMBER
+  DATE
+  BOOLEAN
+  CURRENCY
+  PERCENTAGE
+  EMAIL
+  URL
+  PHONE
+}
+
+model Project {
+  id          String        @id @default(uuid())
+  name        String
+  description String?
+  status      ProjectStatus @default(DRAFT)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  
+  documents      Document[]
+  fieldTemplates FieldTemplate[]
+  extractions    Extraction[]
+  
+  @@map("projects")
+}
+
+model Document {
+  id           String         @id @default(uuid())
+  projectId    String
+  fileName     String
+  fileSize     Int
+  format       DocumentFormat
+  uploadedAt   DateTime       @default(now())
+  parsedAt     DateTime?
+  parsedText   String?        @db.Text
+  metadata     Json?
+  
+  project     Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  extractions Extraction[]
+  citations   Citation[]
+  
+  @@map("documents")
+  @@index([projectId])
+}
+
+model FieldTemplate {
+  id              String    @id @default(uuid())
+  projectId       String
+  fieldName       String
+  fieldType       FieldType
+  description     String?
+  isRequired      Boolean   @default(false)
+  validationRules Json?
+  normalizationRules Json?
+  displayOrder    Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  project         Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  extractedFields ExtractedField[]
+  
+  @@map("field_templates")
+  @@unique([projectId, fieldName])
+  @@index([projectId])
+}
+
+model Extraction {
+  id          String            @id @default(uuid())
+  projectId   String
+  documentId  String
+  status      ExtractionStatus  @default(PENDING)
+  startedAt   DateTime?
+  completedAt DateTime?
+  errorMessage String?
+  
+  project         Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  document        Document         @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  extractedFields ExtractedField[]
+  
+  @@map("extractions")
+  @@index([projectId])
+  @@index([documentId])
+}
+
+model ExtractedField {
+  id              String   @id @default(uuid())
+  extractionId    String
+  fieldTemplateId String
+  rawValue        String?  @db.Text
+  normalizedValue String?  @db.Text
+  confidence      Float    @default(0)
+  extractedAt     DateTime @default(now())
+  
+  extraction     Extraction    @relation(fields: [extractionId], references: [id], onDelete: Cascade)
+  fieldTemplate  FieldTemplate @relation(fields: [fieldTemplateId], references: [id], onDelete: Cascade)
+  citations      Citation[]
+  review         Review?
+  
+  @@map("extracted_fields")
+  @@index([extractionId])
+  @@index([fieldTemplateId])
+}
+
+model Citation {
+  id               String   @id @default(uuid())
+  extractedFieldId String
+  documentId       String
+  startPosition    Int?
+  endPosition      Int?
+  pageNumber       Int?
+  textSnippet      String?  @db.Text
+  
+  extractedField ExtractedField @relation(fields: [extractedFieldId], references: [id], onDelete: Cascade)
+  document       Document       @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  
+  @@map("citations")
+  @@index([extractedFieldId])
+  @@index([documentId])
+}
+
+model Review {
+  id               String       @id @default(uuid())
+  extractedFieldId String       @unique
+  status           ReviewStatus @default(PENDING)
+  manualValue      String?      @db.Text
+  reviewerNotes    String?      @db.Text
+  reviewedAt       DateTime?
+  reviewedBy       String?
+  
+  extractedField ExtractedField @relation(fields: [extractedFieldId], references: [id], onDelete: Cascade)
+  
+  @@map("reviews")
+}
+
+model AsyncRequestStatus {
+  id          String   @id @default(uuid())
+  requestType String
+  status      String
+  progress    Int      @default(0)
+  result      Json?
+  error       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("async_request_status")
+}
