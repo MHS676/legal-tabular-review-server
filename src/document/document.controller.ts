@@ -50,17 +50,33 @@ export class DocumentController {
       throw new BadRequestException('No file uploaded');
     }
 
+    if (!projectId) {
+      throw new BadRequestException('projectId is required');
+    }
+
     const format = this.getDocumentFormat(file.originalname);
+    
+    // For now, only parse TXT and HTML files directly
+    let parsedText: string | null = null;
+    if (format === DocumentFormat.TXT || format === DocumentFormat.HTML) {
+      try {
+        parsedText = file.buffer.toString('utf-8');
+      } catch (error) {
+        console.warn('Failed to parse file as UTF-8:', error);
+      }
+    }
+    // For PDF and DOCX, parsedText remains null until proper parser is implemented
     
     const createDocumentDto: CreateDocumentDto = {
       projectId,
       fileName: file.originalname,
       fileSize: file.size,
       format,
-      parsedText: file.buffer.toString('utf-8'), // Simple text extraction
+      parsedText,
       metadata: {
         mimetype: file.mimetype,
         encoding: file.encoding,
+        uploadedBy: 'system',
       },
     };
 
